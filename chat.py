@@ -76,18 +76,31 @@ def process_pdfs(pdf_files):
 def setup_chain(db):
     """Setup retrieval chain using FAISS and OpenAI LLM."""
     llm = ChatOpenAI(model="gpt-3.5-turbo")
+
     prompt = ChatPromptTemplate.from_template("""
     You are an AI assistant answering questions based on multiple uploaded documents.
-    - Use ONLY the provided context to answer the question.
-    - If relevant information is found in multiple places, merge them into a single coherent answer.
-    - If a question asks about multiple topics, answer them separately.
+    - Each question should be checked against ALL documents separately.
+    - Provide the final response after merging relevant answers from different sources.
+    - If a question has NO relevant information in any document, say: "I don’t know the answer to question number or it is not found in the uploaded content."
+    - Answer each question separately and number them.
+
     <context>
     {context}
     </context>
-    Question: {input}""")
+
+    Question: {input}
+
+    Instructions:
+    - Search for each question in ALL available documents.
+    - If relevant answers exist in multiple places, combine them into one response.
+    - Format the final output like this:
+
+      number. **Question:** [User’s question]  
+         **Answer:** [Your response OR "I don’t know the answer to question number or it is not found in the uploaded content."]
+    """)
     
     documents_chain = create_stuff_documents_chain(llm, prompt)
-    retriever = db.as_retriever(search_kwargs={"k": 8})
+    retriever = db.as_retriever(search_kwargs={"k": 6})
     retrieval_chain = create_retrieval_chain(retriever, documents_chain)
     
     return retrieval_chain
