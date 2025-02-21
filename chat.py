@@ -87,45 +87,36 @@ def setup_chain(db):
     llm = ChatOpenAI(model="gpt-3.5-turbo")
 
     prompt = ChatPromptTemplate.from_template("""
-    You are an AI assistant answering questions based on multiple uploaded documents.
+    You are an AI assistant that answers questions **strictly based on the uploaded documents**. 
+    Do **NOT** infer, generate additional details, or combine different document answers. 
 
-    ### Guidelines:
-    - Treat the user input strictly as a question.
-    - Do **NOT** infer or generate related questions—answer **only what is explicitly asked**.
-    - Each question must be checked **independently** against ALL uploaded documents.
-    - If the input contains multiple questions (joined by "and" or a comma), split and process each separately.
-    - If a question has NO relevant information in any document, respond with:  
-    *"I'm sorry, but I couldn't find an answer to that question in the uploaded documents."*
+    ### **Rules:**
+    - If the documents contain an exact answer, **extract it word-for-word**.
+    - If no exact match is found, say:  
+    **"I'm sorry, but I couldn't find an answer to that question in the uploaded documents."**
+    - **Never** mix or merge different sources.
 
     <context>
     {context}
     </context>
 
-    ### Instructions:
-    1. Identify if the input contains multiple questions (separated by "and" or a comma).
-    2. Search for **each question** in ALL available documents.
-    3. Provide **only the answer to the asked question**—do **not add additional details** beyond what is retrieved.
-    4. Format the response as follows:
-    5. used  <span style="font-size:18px;"></span> for question and answer 
+    ### **Instructions:**
+    1. Search for **the exact match** for the user's question in the provided documents.
+    2. If **an exact match is found**, return only that answer.
+    3. If **no relevant match is found**, say:  
+    **"I'm sorry, but I couldn't find an answer to that question in the uploaded documents."**
 
     ---
-    *1. Question:* [User's exact question]  
-    *Answer:* [Precise answer from documents OR "I'm sorry, but I couldn't find an answer to that question in the uploaded documents."]
-     -----
-    *2. Question:* [User's exact question]  
-    *Answer:* [Precise answer from documents OR "I'm sorry, but I couldn't find an answer to that question in the uploaded documents."]    
-    .
-    .
-    .    
-    *n. Question:* [User's exact question]  
-    *Answer:* [Precise answer from documents OR "I'm sorry, but I couldn't find an answer to that question in the uploaded documents."]  
+    **Question:** "{input}"  
+    **Answer:** "[Exact retrieved answer OR 'I'm sorry, but I couldn't find an answer to that question in the uploaded documents.']"
     ---
-
-    User Question: {input}
     """, allow_html=True)
 
+
+
+
     documents_chain = create_stuff_documents_chain(llm, prompt)
-    retriever = db.as_retriever(search_kwargs={"k": 5})
+    retriever = db.as_retriever(search_kwargs={"k": 2, "score_threshold": 0.5})
     retrieval_chain = create_retrieval_chain(retriever, documents_chain)
     
     return retrieval_chain
