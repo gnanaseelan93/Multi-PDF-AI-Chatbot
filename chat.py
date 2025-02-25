@@ -87,32 +87,13 @@ def setup_chain(db):
     llm = ChatOpenAI(model="gpt-3.5-turbo")
 
     prompt = ChatPromptTemplate.from_template("""
-    You are an AI assistant that answers questions **strictly based on the uploaded documents**. 
-    Do **NOT** infer, generate additional details, or combine different document answers. 
-
-    ### **Rules:**
-    - If the documents contain an exact answer, **extract it word-for-word**.
-    - If no exact match is found, say:  
-    **"I'm sorry, but I couldn't find an answer to that question in the uploaded documents."**
-    - **Never** mix or merge different sources.
+    Answer the following question based only on the provided context:
 
     <context>
     {context}
     </context>
 
-    ### **Instructions:**
-    1. Search for **the exact match** for the user's question in the provided documents.
-    2. If **an exact match is found**, return only that answer.
-    3. If **no relevant match is found**, say:  
-    **"I'm sorry, but I couldn't find an answer to that question in the uploaded documents."**
-
-    ---
-    **Question:** "{input}"  
-    **Answer:** "[Exact retrieved answer OR 'I'm sorry, but I couldn't find an answer to that question in the uploaded documents.']"
-    ---
-    """, allow_html=True)
-
-
+    Question: {input}""")
 
 
     documents_chain = create_stuff_documents_chain(llm, prompt)
