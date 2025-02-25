@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -22,16 +21,11 @@ os.environ["OPENAI_API_KEY"] = openai_api_key
 
 FAISS_INDEX_PATH = "faiss_index"
 UPLOADED_FILES_KEY = "uploaded_files"
-# Ensure `processing` is initialized in session state
-if "processing" not in st.session_state:
-    st.session_state.processing = False
-UPLOADED_FILES_KEY = "uploaded_files"
 
 # Ensure `processing` is initialized in session state
 if "processing" not in st.session_state:
     st.session_state.processing = False
 
-# Utility functions for FAISS Index
 # Utility functions for FAISS Index
 def save_faiss_index(db, path=FAISS_INDEX_PATH):
     db.save_local(path)
@@ -52,23 +46,8 @@ def delete_faiss_index():
         shutil.rmtree(FAISS_INDEX_PATH)
 
 # PDF Processing Function
-def delete_faiss_index():
-    if os.path.exists(FAISS_INDEX_PATH):
-        shutil.rmtree(FAISS_INDEX_PATH)
-
-# PDF Processing Function
 def process_pdfs(pdf_files):
     all_documents = []
-    
-    # If no files are uploaded, delete index
-    if not pdf_files:
-        delete_faiss_index()
-        st.session_state[UPLOADED_FILES_KEY] = []
-        return None
-
-    # Remove old FAISS index to avoid stale data
-    delete_faiss_index()
-    
     
     # If no files are uploaded, delete index
     if not pdf_files:
@@ -92,7 +71,6 @@ def process_pdfs(pdf_files):
             continue
         
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
         all_documents.extend(text_splitter.split_documents(docs))
         os.remove(temp_pdf_path)
     
@@ -100,58 +78,26 @@ def process_pdfs(pdf_files):
         return None
 
     db = FAISS.from_documents(all_documents, OpenAIEmbeddings())  
-
-    db = FAISS.from_documents(all_documents, OpenAIEmbeddings())  
     save_faiss_index(db)
-    
     
     return db
 
-# Retrieval Chain Setup
 # Retrieval Chain Setup
 def setup_chain(db):
     llm = ChatOpenAI(model="gpt-3.5-turbo")
 
     prompt = ChatPromptTemplate.from_template("""
-    You are an AI assistant answering questions based on multiple uploaded documents.
-
-    ### Guidelines:
-    - Treat the user input strictly as a question.
-    - Do **NOT** infer or generate related questions—answer **only what is explicitly asked**.
-    - Each question must be checked **independently** against ALL uploaded documents.
-    - If the input contains multiple questions (joined by "and" or a comma), split and process each separately.
-    - If a question has NO relevant information in any document, respond with:  
-    *"I'm sorry, but I couldn't find an answer to that question in the uploaded documents."*
+    Answer the following question based only on the provided context:
 
     <context>
     {context}
     </context>
 
-    ### Instructions:
-    1. Identify if the input contains multiple questions (separated by "and" or a comma).
-    2. Search for **each question** in ALL available documents.
-    3. Provide **only the answer to the asked question**—do **not add additional details** beyond what is retrieved.
-    4. Format the response as follows:
-    5. used  <span style="font-size:18px;"></span> for question and anser 
+    Question: {input}""")
 
-    ---
-    *1. Question:* [User's exact question]  
-    *Answer:* [Precise answer from documents OR "I'm sorry, but I couldn't find an answer to that question in the uploaded documents."]
-     -----
-    *2. Question:* [User's exact question]  
-    *Answer:* [Precise answer from documents OR "I'm sorry, but I couldn't find an answer to that question in the uploaded documents."]    
-    .
-    .
-    .    
-    *n. Question:* [User's exact question]  
-    *Answer:* [Precise answer from documents OR "I'm sorry, but I couldn't find an answer to that question in the uploaded documents."]  
-    ---
-
-    User Question: {input}
-    """, allow_html=True)
 
     documents_chain = create_stuff_documents_chain(llm, prompt)
-    retriever = db.as_retriever(search_kwargs={"k": 5})
+    retriever = db.as_retriever(search_kwargs={"k": 2, "score_threshold": 0.5})
     retrieval_chain = create_retrieval_chain(retriever, documents_chain)
     
     return retrieval_chain
@@ -165,14 +111,7 @@ if UPLOADED_FILES_KEY not in st.session_state:
     st.session_state[UPLOADED_FILES_KEY] = []
 
 # Clear FAISS Index
-# Load previously uploaded files
-if UPLOADED_FILES_KEY not in st.session_state:
-    st.session_state[UPLOADED_FILES_KEY] = []
-
-# Clear FAISS Index
 if st.sidebar.button("🗑 Clear FAISS Index and Rebuild"):
-    delete_faiss_index()
-    st.session_state[UPLOADED_FILES_KEY] = []
     delete_faiss_index()
     st.session_state[UPLOADED_FILES_KEY] = []
     st.success("✅ FAISS index cleared. Re-upload PDFs.")
@@ -192,25 +131,12 @@ if uploaded_filenames != previously_uploaded:
     st.session_state[UPLOADED_FILES_KEY] = uploaded_filenames
     st.session_state.processing = True  # ✅ Already initialized, no error
 
-# Detect file removals or additions
-uploaded_filenames = [file.name for file in uploaded_files] if uploaded_files else []
-previously_uploaded = st.session_state[UPLOADED_FILES_KEY]
-
-if uploaded_filenames != previously_uploaded:
-    st.session_state[UPLOADED_FILES_KEY] = uploaded_filenames
-    st.session_state.processing = True  # ✅ Already initialized, no error
-
     with st.spinner("Processing PDFs..."):
-        db = process_pdfs(uploaded_files)
-
         db = process_pdfs(uploaded_files)
 
     if db:
         st.success("✅ PDFs processed successfully!")
     else:
-        st.warning("⚠️ No valid PDFs uploaded. Index cleared.")
-
-    st.session_state.processing = False  # ✅ Already initialized, no error
         st.warning("⚠️ No valid PDFs uploaded. Index cleared.")
 
     st.session_state.processing = False  # ✅ Already initialized, no error
@@ -220,21 +146,13 @@ if db:
     
     query = st.text_input("🔍 Type your questions here:", disabled=st.session_state.processing)
     get_answer_btn = st.button("💡 Get Answer", disabled=st.session_state.processing)
-    query = st.text_input("🔍 Type your questions here:", disabled=st.session_state.processing)
-    get_answer_btn = st.button("💡 Get Answer", disabled=st.session_state.processing)
 
-    if get_answer_btn:
     if get_answer_btn:
         if query.strip() == "":
             st.warning("⚠️ Please enter a question before submitting.")
         elif query.count("?") > 1:  # Basic check for multiple questions
             st.warning("⚠️ Please ask only one question at a time.")
-            st.warning("⚠️ Please enter a question before submitting.")
-        elif query.count("?") > 1:  # Basic check for multiple questions
-            st.warning("⚠️ Please ask only one question at a time.")
         else:
-            with st.spinner("Processing Query... Please wait."):
-                response = retrieval_chain.invoke({"input": query})
             with st.spinner("Processing Query... Please wait."):
                 response = retrieval_chain.invoke({"input": query})
             st.success(response['answer'])
